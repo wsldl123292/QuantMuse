@@ -1,0 +1,41 @@
+{
+    "data_sources": {
+        "crypto": {
+            "binance": {
+                "api_url": "https://api.binance.com",
+                "ws_url": "wss://stream.binance.com:9443/ws",
+                "symbols": ["BTCUSDT", "ETHUSDT"]
+            }
+        },
+        "stock": {
+            "alpha_vantage": {
+                "api_url": "https://www.alphavantage.co/query",
+                "symbols": ["AAPL", "MSFT", "GOOGL"]
+            }
+        }
+    },
+    "risk_parameters": {
+        "crypto": {
+            "max_position_size": 1.0,
+            "stop_loss_percent": 0.02,
+            "take_profit_percent": 0.05,
+            "max_daily_loss": 1000.0
+        },
+        "stock": {
+            "max_position_size": 100,
+            "stop_loss_percent": 0.01,
+            "take_profit_percent": 0.03,
+            "max_daily_loss": 5000.0
+        }
+    },
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "trading_db",
+        "user": "trader"
+    },
+    "logging": {
+        "level": "info",
+        "file": "trading_system.log"
+    }
+} 
