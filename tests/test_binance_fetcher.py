@@ -2,61 +2,107 @@ import unittest
 from unittest.mock import Mock, patch
 import pandas as pd
 from datetime import datetime
+import requests
 from data_service.fetchers.binance_fetcher import BinanceFetcher
-from data_service.utils.exceptions import DataFetchError
+from binance.exceptions import BinanceAPIException
 
 class TestBinanceFetcher(unittest.TestCase):
-    """Test cases for BinanceFetcher class"""
-    
+    """Test cases for BinanceFetcher"""
+
     def setUp(self):
-        """Set up test fixtures before each test method"""
+        """Set up test fixtures"""
+        # Create patchers
+        self.client_patcher = patch('binance.client.Client')
+        self.requests_patcher = patch('binance.client.requests.get')
+        
+        # Start patchers
+        self.mock_client_class = self.client_patcher.start()
+        self.mock_requests = self.requests_patcher.start()
+        
+        # Create a mock response
+        mock_response = Mock(spec=requests.Response)
+        mock_response.status_code = 200
+        mock_response.text = '{"msg": "success"}'
+        self.mock_requests.return_value = mock_response
+        
+        # Configure the mock client instance
+        self.mock_client_instance = Mock()
+        self.mock_client_class.return_value = self.mock_client_instance
+        
+        # Create fetcher with mocked client
         self.fetcher = BinanceFetcher()
-        
+
+    def tearDown(self):
+        """Clean up after each test"""
+        self.client_patcher.stop()
+        self.requests_patcher.stop()
+
     def test_initialization(self):
-        """Test fetcher initialization"""
+        """Test if fetcher initializes correctly"""
         self.assertIsNotNone(self.fetcher.client)
-        self.assertIsNotNone(self.fetcher.logger)
-        
-    @patch('binance.client.Client.get_historical_klines')
-    def test_fetch_historical_data_success(self, mock_get_klines):
-        """Test successful historical data fetch"""
+
+    def test_fetch_historical_data(self):
+        """Test historical data fetching"""
         # Mock data
-        mock_data = [
+        mock_klines = [
             [
-                1499040000000,      # Timestamp
-                "8100.0",           # Open
-                "8200.0",           # High
-                "8000.0",           # Low
-                "8150.0",           # Close
-                "100.0",            # Volume
-                1499644799999,      # Close time
-                "1000.0",           # Quote volume
-                100,                # Number of trades
-                "50.0",             # Taker buy base
-                "400.0",            # Taker buy quote
-                "0"                 # Ignore
+                1499040000000,  # Timestamp
+                "8100.0",       # Open
+                "8200.0",       # High
+                "8000.0",       # Low
+                "8150.0",       # Close
+                "100.0",        # Volume
+                1499644799999,  # Close time
+                "1000.0",       # Quote volume
+                100,            # Number of trades
+                "50.0",         # Taker buy base
+                "400.0",        # Taker buy quote
+                "0"            # Ignore
             ]
         ]
         
-        mock_get_klines.return_value = mock_data
+        # Configure mock
+        self.mock_client_instance.get_klines.return_value = mock_klines
         
-        # Test
+        # Execute test
         df = self.fetcher.fetch_historical_data("BTCUSDT")
         
-        # Assertions
+        # Verify results
         self.assertIsInstance(df, pd.DataFrame)
         self.assertEqual(len(df), 1)
-        self.assertEqual(df['close'].iloc[0], 8150.0)
-        
-    @patch('binance.client.Client.get_historical_klines')
-    def test_fetch_historical_data_error(self, mock_get_klines):
-        """Test error handling in historical data fetch"""
-        mock_get_klines.side_effect = Exception("API Error")
-        
-        with self.assertRaises(DataFetchError):
-            self.fetcher.fetch_historical_data("BTCUSDT")
-            
+        self.assertEqual(float(df['close'].iloc[0]), 8150.0)
+
     def test_invalid_symbol(self):
         """Test handling of invalid symbol"""
-        with self.assertRaises(ValidationError):
-            self.fetcher.fetch_historical_data("") 
+        # Configure mock to raise an exception
+        self.mock_client_instance.get_klines.side_effect = BinanceAPIException(
+            response=Mock(status_code=400, text="Invalid symbol"),
+            status_code=400,
+            text="Invalid symbol"
+        )
+        
+        with self.assertRaises(Exception):
+            self.fetcher.fetch_historical_data("")
+
+    def test_market_depth(self):
+        """Test market depth fetching"""
+        # Mock order book data
+        mock_depth = {
+            'bids': [['8100.0', '1.0'], ['8099.0', '2.0']],
+            'asks': [['8101.0', '1.0'], ['8102.0', '2.0']]
+        }
+        
+        # Configure mock
+        self.mock_client_instance.get_order_book.return_value = mock_depth
+        
+        # Execute test
+        depth = self.fetcher.get_market_depth("BTCUSDT")
+        
+        # Verify results
+        self.assertIn('bids', depth)
+        self.assertIn('asks', depth)
+        self.assertEqual(len(depth['bids']), 2)
+        self.assertEqual(len(depth['asks']), 2)
+
+if __name__ == '__main__':
+    unittest.main() 

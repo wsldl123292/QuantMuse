@@ -1,85 +1,72 @@
 from binance.client import Client
 from binance.websockets import BinanceSocketManager
-import pandas as pd
 from datetime import datetime
+import pandas as pd
 import logging
-from typing import Dict, Any, Optional
+from typing import Optional, Dict, Any, Callable
+import asyncio
+from ..utils.exceptions import DataFetchError
 
 class BinanceFetcher:
-    """
-    A class to handle all Binance API interactions for data fetching.
-    
-    This class provides methods to:
-    - Fetch historical cryptocurrency data
-    - Stream real-time market data
-    - Get order book information
-    
-    Attributes:
-        client: Binance API client instance
-        bm: Binance WebSocket manager
-        logger: Logger instance for tracking operations
-        _ws_connection: WebSocket connection handler
-    """
+    """Binance数据获取器"""
     
     def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None):
         """
-        Initialize the Binance fetcher with API credentials.
-        
-        Args:
-            api_key (str, optional): Binance API key
-            api_secret (str, optional): Binance API secret key
-            
-        Raises:
-            BinanceAPIException: If API credentials are invalid
+        初始化Binance客户端
+        :param api_key: Binance API key (可选)
+        :param api_secret: Binance API secret (可选)
         """
-        self.client = Client(api_key, api_secret)
-        self.bm = BinanceSocketManager(self.client)
         self.logger = logging.getLogger(__name__)
-        self._ws_connection = None
-        self._callbacks = []
+        try:
+            self.client = Client(api_key, api_secret, tld='us')
+            self.bm = None  # WebSocket管理器
+            self.ws_connections = {}  # 存储WebSocket连接
+            self.logger.info("Binance fetcher initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Binance client: {str(e)}")
+            raise
 
-    def fetch_historical_data(self, symbol: str, interval: str = '1d', 
-                            limit: int = 1000) -> pd.DataFrame:
+    def fetch_historical_data(
+        self,
+        symbol: str = "BTCUSD",
+        interval: str = "1h",
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 1000
+    ) -> pd.DataFrame:
         """
-        Fetch historical kline/candlestick data from Binance.
-        
-        Args:
-            symbol (str): Trading pair symbol (e.g., 'BTCUSDT')
-            interval (str): Candlestick interval (e.g., '1d', '1h', '15m')
-            limit (int): Number of candlesticks to fetch
-            
-        Returns:
-            pd.DataFrame: DataFrame containing historical market data with columns:
-                - timestamp: Datetime index
-                - open: Opening price
-                - high: Highest price
-                - low: Lowest price
-                - close: Closing price
-                - volume: Trading volume
-                
-        Raises:
-            DataFetchException: If data fetching fails
+        获取历史K线数据
+        :param symbol: 交易对
+        :param interval: K线间隔
+        :param start_time: 开始时间
+        :param end_time: 结束时间
+        :param limit: 返回的K线数量
+        :return: DataFrame包含OHLCV数据
         """
         try:
-            # Fetch raw kline data from Binance
-            klines = self.client.get_historical_klines(
+            # 转换时间格式
+            start_str = int(start_time.timestamp() * 1000) if start_time else None
+            end_str = int(end_time.timestamp() * 1000) if end_time else None
+            
+            # 获取K线数据
+            klines = self.client.get_klines(
                 symbol=symbol,
                 interval=interval,
+                startTime=start_str,
+                endTime=end_str,
                 limit=limit
             )
             
-            # Convert to DataFrame and process
+            # 转换为DataFrame
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
                 'close_time', 'quote_volume', 'trades', 'taker_buy_base',
                 'taker_buy_quote', 'ignore'
             ])
             
-            # Convert numeric columns
+            # 处理数据类型
             numeric_columns = ['open', 'high', 'low', 'close', 'volume']
             df[numeric_columns] = df[numeric_columns].astype(float)
-            
-            # Process timestamps
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
             
@@ -88,82 +75,94 @@ class BinanceFetcher:
             
         except Exception as e:
             self.logger.error(f"Error fetching historical data: {str(e)}")
-            raise
+            raise DataFetchError(f"Failed to fetch historical data: {str(e)}")
 
-    def fetch_realtime_data(self, symbol: str, callback):
+    async def start_websocket(self, symbol: str, callback: Callable[[Dict], None]):
         """
-        Start websocket connection for real-time market data.
-        
-        Args:
-            symbol (str): Trading pair symbol
-            callback (callable): Function to handle incoming data
-            
-        The callback function will receive data in the format:
-        {
-            'symbol': str,
-            'price': float,
-            'quantity': float,
-            'timestamp': datetime
-        }
+        启动WebSocket实时数据流
+        :param symbol: 交易对
+        :param callback: 处理实时数据的回调函数
         """
-        def handle_socket_message(msg):
-            """Internal handler for websocket messages"""
-            try:
-                if msg.get('e') == 'trade':
-                    # Process trade data
-                    data = {
-                        'symbol': msg['s'],
-                        'price': float(msg['p']),
-                        'quantity': float(msg['q']),
-                        'timestamp': pd.to_datetime(msg['T'], unit='ms')
-                    }
-                    callback(data)
-            except Exception as e:
-                self.logger.error(f"Error processing websocket message: {str(e)}")
-
         try:
-            # Start websocket connection
-            self._ws_connection = self.bm.start_trade_socket(
+            if not self.bm:
+                self.bm = BinanceSocketManager(self.client)
+            
+            # 创建K线数据连接
+            conn_key = f"{symbol.lower()}@kline_1m"
+            
+            def handle_socket_message(msg):
+                try:
+                    if msg['e'] == 'kline':
+                        data = {
+                            'symbol': msg['s'],
+                            'timestamp': pd.to_datetime(msg['E'], unit='ms'),
+                            'open': float(msg['k']['o']),
+                            'high': float(msg['k']['h']),
+                            'low': float(msg['k']['l']),
+                            'close': float(msg['k']['c']),
+                            'volume': float(msg['k']['v'])
+                        }
+                        callback(data)
+                except Exception as e:
+                    self.logger.error(f"Error processing websocket message: {str(e)}")
+            
+            self.ws_connections[conn_key] = self.bm.start_kline_socket(
                 symbol=symbol,
-                callback=handle_socket_message
+                callback=handle_socket_message,
+                interval='1m'
             )
+            
+            # 启动WebSocket
             self.bm.start()
-            self.logger.info(f"Started real-time data stream for {symbol}")
+            self.logger.info(f"WebSocket started for {symbol}")
+            
         except Exception as e:
             self.logger.error(f"Error starting websocket: {str(e)}")
             raise
 
-    def get_market_depth(self, symbol: str) -> Dict[str, Any]:
+    def stop_websocket(self, symbol: str):
+        """停止WebSocket连接"""
+        try:
+            conn_key = f"{symbol.lower()}@kline_1m"
+            if conn_key in self.ws_connections:
+                self.bm.stop_socket(self.ws_connections[conn_key])
+                del self.ws_connections[conn_key]
+                self.logger.info(f"WebSocket stopped for {symbol}")
+        except Exception as e:
+            self.logger.error(f"Error stopping websocket: {str(e)}")
+            raise
+
+    def get_order_book(self, symbol: str = "BTCUSD", limit: int = 100) -> Dict:
         """
-        Fetch current order book data.
-        
-        Args:
-            symbol (str): Trading pair symbol
-            
-        Returns:
-            dict: Order book data with structure:
-                {
-                    'bids': [[price, quantity], ...],
-                    'asks': [[price, quantity], ...]
-                }
+        获取订单簿数据
+        :param symbol: 交易对
+        :param limit: 订单簿深度
+        :return: 订单簿数据
         """
         try:
-            depth = self.client.get_order_book(symbol=symbol, limit=100)
+            depth = self.client.get_order_book(symbol=symbol, limit=limit)
             return {
                 'bids': [[float(price), float(qty)] for price, qty in depth['bids']],
                 'asks': [[float(price), float(qty)] for price, qty in depth['asks']]
             }
         except Exception as e:
-            self.logger.error(f"Error fetching market depth: {str(e)}")
-            raise
+            self.logger.error(f"Error fetching order book: {str(e)}")
+            raise DataFetchError(f"Failed to fetch order book: {str(e)}")
 
-    def stop_realtime_data(self):
+    def get_recent_trades(self, symbol: str = "BTCUSD", limit: int = 100) -> pd.DataFrame:
         """
-        Stop websocket connection and cleanup resources.
-        Should be called when real-time data is no longer needed.
+        获取最近成交
+        :param symbol: 交易对
+        :param limit: 返回的成交数量
+        :return: 最近成交数据
         """
-        if self._ws_connection:
-            self.bm.stop_socket(self._ws_connection)
-            self.bm.close()
-            self._ws_connection = None
-            self.logger.info("Stopped real-time data stream") 
+        try:
+            trades = self.client.get_recent_trades(symbol=symbol, limit=limit)
+            df = pd.DataFrame(trades)
+            df['time'] = pd.to_datetime(df['time'], unit='ms')
+            df['price'] = df['price'].astype(float)
+            df['qty'] = df['qty'].astype(float)
+            return df
+        except Exception as e:
+            self.logger.error(f"Error fetching recent trades: {str(e)}")
+            raise DataFetchError(f"Failed to fetch recent trades: {str(e)}") 

@@ -1,0 +1,12 @@
+pandas
+numpy
+python-binance>=1.0.0
+websocket-client>=1.0.0
+alpha_vantage
+fastapi
+uvicorn
+
+[test]
+pytest
+pytest-cov
+pytest-asyncio
