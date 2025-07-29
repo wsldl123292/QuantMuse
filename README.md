@@ -286,13 +286,7 @@ This software is for educational and research purposes only. Trading involves su
 - [Streamlit](https://streamlit.io/) for dashboard framework
 - [FastAPI](https://fastapi.tiangolo.com/) for web framework
 
-## 📞 Support
 
-- 📧 Email: your.email@example.com
-- 💬 Issues: [GitHub Issues](https://github.com/yourusername/tradingsystem/issues)
-- 📖 Wiki: [GitHub Wiki](https://github.com/yourusername/tradingsystem/wiki)
-
----
 
 <div align="center">
   <p>Made with ❤️ by the Quantitative Trading Community</p>
