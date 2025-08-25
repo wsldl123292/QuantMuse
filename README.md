@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](https://github.com/yourusername/tradingsystem)
+[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](https://github.com/wsldl123292/QuantMuse)
 
 > **A comprehensive quantitative trading system with AI-powered analysis, real-time data processing, and advanced risk management**
 
@@ -93,8 +93,8 @@ This is a production-ready quantitative trading system that combines traditional
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/tradingsystem.git
-cd tradingsystem
+git clone https://github.com/wsldl123292/QuantMuse.git
+cd QuantMuse
 ```
 
 ### 2. Install Dependencies
@@ -136,8 +136,8 @@ python run_web_interface.py
 ### Full Installation
 ```bash
 # 1. Clone repository
-git clone https://github.com/yourusername/tradingsystem.git
-cd tradingsystem
+git clone https://github.com/wsldl123292/QuantMuse.git
+cd QuantMuse
 
 # 2. Create virtual environment
 python -m venv venv
@@ -291,14 +291,14 @@ This software is for educational and research purposes only. Trading involves su
 <div align="center">
   <p>Made with ❤️ by the Quantitative Trading Community</p>
   <p>
-    <a href="https://github.com/yourusername/tradingsystem/stargazers">
-      <img src="https://img.shields.io/github/stars/yourusername/tradingsystem" alt="Stars">
+    <a href="https://github.com/wsldl123292/QuantMuse/stargazers">
+      <img src="https://img.shields.io/github/stars/wsldl123292/QuantMuse" alt="Stars">
     </a>
-    <a href="https://github.com/yourusername/tradingsystem/network">
-      <img src="https://img.shields.io/github/forks/yourusername/tradingsystem" alt="Forks">
+    <a href="https://github.com/wsldl123292/QuantMuse/network">
+      <img src="https://img.shields.io/github/forks/wsldl123292/QuantMuse" alt="Forks">
     </a>
-    <a href="https://github.com/yourusername/tradingsystem/issues">
-      <img src="https://img.shields.io/github/issues/yourusername/tradingsystem" alt="Issues">
+    <a href="https://github.com/wsldl123292/QuantMuse/issues">
+      <img src="https://img.shields.io/github/issues/wsldl123292/QuantMuse" alt="Issues">
     </a>
   </p>
 </div> 
