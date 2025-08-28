@@ -18,8 +18,16 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 try:
+    # Try relative imports first
+    try:
+        from .charts import ChartGenerator
+        from .widgets import DashboardWidgets
+    except ImportError:
+        # Fall back to absolute imports
+        from data_service.dashboard.charts import ChartGenerator
+        from data_service.dashboard.widgets import DashboardWidgets
+
     from data_service.backtest import BacktestEngine, PerformanceAnalyzer
-    from data_service.dashboard import ChartGenerator, DashboardWidgets
     from data_service.factors import FactorCalculator, FactorBacktest
     from data_service.strategies import StrategyRegistry
     from data_service.ai import NLPProcessor, SentimentFactorCalculator
